@@ -1,0 +1,14 @@
+[package]
+name = "golem-core"
+version = "0.1.0"
+authors = ["Marek Franciszkiewicz <marek@golem.network>"]
+license = "GPL-3.0"
+
+[workspace]
+members = [
+    "./",
+    "net"
+]
+
+[dependencies]
+net = { version = "0.1", path = "net" }
