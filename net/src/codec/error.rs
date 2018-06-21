@@ -1,4 +1,4 @@
-use std::{boxed, error, convert, fmt, io};
+use std::{error, convert, fmt, io};
 use bincode::ErrorKind;
 
 #[derive(Debug, Clone)]
@@ -47,7 +47,7 @@ impl convert::From<io::Error> for CodecError
     }
 }
 
-impl convert::From<boxed::Box<ErrorKind>> for CodecError {
+impl convert::From<Box<ErrorKind>> for CodecError {
     fn from(e: Box<ErrorKind>) -> Self
     {
         CodecError::new(&format!("{}", e))
