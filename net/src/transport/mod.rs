@@ -1,114 +1,70 @@
+pub mod error;
 pub mod message;
-pub mod session;
 pub mod tcp;
 pub mod udp;
 
-use std::{cmp, fmt, net};
-use std::io::{Error, ErrorKind};
+use std::clone::Clone;
+use std::fmt;
 
-use actix::{AsyncContext, Unsync};
+use actix::AsyncContext;
 
-use super::logic::Logic;
-use self::tcp::{TcpTransportAddr, TcpSessionAddr};
-use self::udp::UdpTransportAddr;
+use self::tcp::{TcpActorAddr, TcpSessionAddr};
+use self::udp::UdpActorAddr;
+use super::network::Network;
 
-pub type AddrType = Unsync;
-
-//
-// Transport definition
-//
-
-/// Available transports
-#[derive(Hash, Debug, Copy, Clone, PartialEq)]
-pub enum Transport
-{
-    Tcp,
-    Udp
+/// Available transport protocols
+#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
+pub enum TransportProtocol {
+    Tcp = 6,
+    Udp = 17,
+    Unsupported,
 }
 
-impl fmt::Display for Transport
-{
-    fn fmt(&self, f: &mut fmt::Formatter)
-           -> Result<(), fmt::Error>
-    {
-        match *self {
-            Transport::Tcp => write!(f, "TCP"),
-            Transport::Udp => write!(f, "UDP"),
+impl From<u16> for TransportProtocol {
+    fn from(value: u16) -> Self {
+        match value {
+            6 => TransportProtocol::Tcp,
+            17 => TransportProtocol::Udp,
+            _ => TransportProtocol::Unsupported,
         }
     }
 }
 
-impl cmp::Eq for Transport
-{}
-
-/// Actor addresses
-#[derive(Clone)]
-pub enum TransportRouter<L>
-where
-    L: Logic,
-    L::Context: AsyncContext<L>,
-{
-    Tcp(TcpTransportAddr<L>),
-    Udp(UdpTransportAddr<L>),
+impl fmt::Display for TransportProtocol {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "{:?}", self)
+    }
 }
 
-pub enum TransportSession<L>
+/// Transport router addresses
+pub enum Transport<N>
 where
-    L: Logic + 'static,
-    L::Context: AsyncContext<L>,
+    N: Network,
+    N::Context: AsyncContext<N>,
 {
-    Tcp(TcpSessionAddr<L>),
-    Udp(UdpTransportAddr<L>),
+    Tcp(TcpActorAddr<N>),
+    Udp(UdpActorAddr<N>),
 }
 
-impl<L> Clone for TransportSession<L>
+/// Transport session addresses
+pub enum TransportSession<N>
 where
-    L: Logic + 'static,
-    L::Context: AsyncContext<L>,
+    N: Network + 'static,
+    N::Context: AsyncContext<N>,
+{
+    Tcp(TcpSessionAddr<N>),
+    Udp(UdpActorAddr<N>),
+}
+
+impl<N> Clone for TransportSession<N>
+where
+    N: Network + 'static,
+    N::Context: AsyncContext<N>,
 {
     fn clone(&self) -> Self {
         match *self {
             TransportSession::Tcp(ref a) => TransportSession::Tcp(a.clone()),
             TransportSession::Udp(ref a) => TransportSession::Udp(a.clone()),
         }
-    }
-}
-
-//
-// Helper functions
-//
-
-pub fn mailbox_io_error()
-    -> Error
-{
-    Error::new(ErrorKind::Other, "mailbox error")
-}
-
-pub fn not_listening_error(name: &str)
-    -> Error
-{
-    Error::new(
-        ErrorKind::NotConnected,
-        format!("{} transport is not listening", name)
-    )
-}
-
-pub fn not_connected_error(transport: &Transport, address: &net::SocketAddr)
-    -> Error
-{
-    Error::new(
-        ErrorKind::NotConnected,
-        format!("{} is not connected to {}", transport, address)
-    )
-}
-
-
-pub fn log_error<T, E>(result: Result<T, E>)
-where
-    E: fmt::Display,
-{
-    match result {
-        Ok(_) => (),
-        Err(e) => eprintln!("Error: {}", e),
     }
 }

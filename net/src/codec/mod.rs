@@ -1,8 +1,8 @@
 use std::u32::MAX as u32_MAX;
 
+use bincode::internal::{deserialize, serialize};
 use bincode::Bounded;
-use bincode::internal::{serialize, deserialize};
-use byteorder::{ByteOrder, BigEndian as Order};
+use byteorder::{BigEndian as Order, ByteOrder};
 use bytes::{BigEndian, BufMut, BytesMut};
 use tokio_codec::{Decoder, Encoder};
 
@@ -12,16 +12,13 @@ pub mod message;
 use self::error::CodecError;
 use self::message::Message;
 
-
 pub struct MessageCodec;
 
 impl Encoder for MessageCodec {
     type Item = Message;
     type Error = CodecError;
 
-    fn encode(&mut self, value: Self::Item, bytes: &mut BytesMut)
-        -> Result<(), Self::Error>
-    {
+    fn encode(&mut self, value: Self::Item, bytes: &mut BytesMut) -> Result<(), Self::Error> {
         let size_limit = Bounded(u32_MAX as u64);
         let result = serialize::<Message, Bounded, Order>(&value, size_limit);
         let ser = match result {
@@ -44,9 +41,7 @@ impl Decoder for MessageCodec {
     type Item = Message;
     type Error = CodecError;
 
-    fn decode(&mut self, bytes: &mut BytesMut)
-        -> Result<Option<Self::Item>, Self::Error>
-    {
+    fn decode(&mut self, bytes: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         if bytes.len() < 4 {
             return Ok(None);
         }
@@ -61,7 +56,7 @@ impl Decoder for MessageCodec {
         let msg = bytes.split_to(size);
         match deserialize::<Message, Order>(msg.as_ref()) {
             Ok(m) => Ok(Some(m)),
-            Err(e) => Err(CodecError::from(e))
+            Err(e) => Err(CodecError::from(e)),
         }
     }
 }

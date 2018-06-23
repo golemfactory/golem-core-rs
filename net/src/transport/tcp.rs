@@ -2,99 +2,108 @@ use std::{error, net};
 
 use actix::io::{FramedWrite, WriteHandler};
 use actix::prelude::*;
-use futures::{future, Future};
+use actix::Unsync;
 use futures::stream::Stream;
-use tokio_io::AsyncRead;
+use futures::{future, Future};
+use tokio_codec::FramedRead;
 use tokio_io::io::WriteHalf;
-use tokio_io::codec::FramedRead;
+use tokio_io::AsyncRead;
 use tokio_tcp::{TcpListener, TcpStream};
 
-use codec::MessageCodec;
 use codec::error::CodecError;
 use codec::message::Message;
-use logic::*;
-use transport::*;
+use codec::MessageCodec;
+use network::*;
+use transport::error::*;
 use transport::message::*;
+use transport::*;
 
-pub type TcpTransportAddr<L> = Addr<AddrType, TcpTransport<L>>;
-pub type TcpSessionAddr<L> = Addr<AddrType, TcpSession<L>>;
+pub type TcpActorAddr<N> = Addr<Unsync, TcpTransport<N>>;
+pub type TcpSessionAddr<N> = Addr<Unsync, TcpSession<N>>;
 
-
+/// Session creation message (TCP exclusive)
 #[derive(Debug, Message)]
-struct CreateSession
-{
+struct CreateSession {
     stream: TcpStream,
     initiator: bool,
 }
 
-//
-// TCP transport
-//
-
-pub struct TcpTransport<L>
+/// TCP transport actor
+pub struct TcpTransport<N>
 where
-    L: Logic + 'static,
-    L::Context: AsyncContext<L>,
+    N: Network + 'static,
+    N::Context: AsyncContext<N>,
 {
+    /// Socket address
     pub address: net::SocketAddr,
-    pub logic: LogicAddr<L>,
-    pub actor: TcpTransportAddr<L>,
+    /// Network actor address
+    pub network: NetAddr<N>,
+    /// Own actor address
+    pub actor: TcpActorAddr<N>,
 }
 
-impl<L> TcpTransport<L>
+impl<N> TcpTransport<N>
 where
-    L: Logic + 'static,
-    L::Context: AsyncContext<L>,
+    N: Network + 'static,
+    N::Context: AsyncContext<N>,
 {
-    pub fn run(logic: LogicAddr<L>, address: net::SocketAddr)
-        -> Result<TcpTransportAddr<L>, Box<error::Error>>
-    {
+    pub fn run(
+        network: NetAddr<N>,
+        address: net::SocketAddr,
+    ) -> Result<TcpActorAddr<N>, Box<error::Error>> {
         let listener = match TcpListener::bind(&address) {
             Ok(l) => l,
-            Err(_) => return Err(Box::new(mailbox_io_error())),
+            Err(_) => return Err(Box::new(cannot_listen_error("TCP", &address))),
         };
 
         let router = TcpTransport::create(move |ctx| {
-            let flow = listener.incoming()
+            let flow = listener
+                .incoming()
                 .map_err(|_| ())
-                .map(move |stream| CreateSession{ stream, initiator: false });
+                .map(move |stream| CreateSession {
+                    stream,
+                    initiator: false,
+                });
 
             ctx.add_message_stream(flow);
-            TcpTransport{ address, logic, actor: ctx.address() }
+            TcpTransport {
+                address,
+                network,
+                actor: ctx.address(),
+            }
         });
 
         Ok(router)
     }
 }
 
-impl<L> Actor for TcpTransport<L>
+impl<N> Actor for TcpTransport<N>
 where
-    L: Logic + 'static,
-    L::Context: AsyncContext<L>,
+    N: Network + 'static,
+    N::Context: AsyncContext<N>,
 {
     type Context = Context<Self>;
 
-    fn started(&mut self, _ctx: &mut Self::Context)
-    {
-        let router = TransportRouter::Tcp(self.actor.clone());
+    fn started(&mut self, _ctx: &mut Self::Context) {
+        let router = Transport::Tcp(self.actor.clone());
         let msg = Listening(router);
 
-        let future = self.logic
+        let future = self
+            .network
             .send(msg)
-            .map_err(|_| eprintln!("TCP -> logic error (started)"));
+            .map_err(|_| eprintln!("TCP -> network error (started)"));
 
         Arbiter::handle().spawn(future);
     }
 
-    fn stopping(&mut self, _ctx: &mut Self::Context)
-        -> Running
-    {
-        let router = TransportRouter::Tcp(self.actor.clone());
+    fn stopping(&mut self, _ctx: &mut Self::Context) -> Running {
+        let router = Transport::Tcp(self.actor.clone());
         let msg = Stopped(router);
 
-        let future = self.logic
+        let future = self
+            .network
             .send(msg)
-            .map_err(|_| eprintln!("TCP -> logic error (stopping)"));
+            .map_err(|_| eprintln!("TCP -> network error (stopping)"));
 
         Arbiter::handle().spawn(future);
         Running::Stop
@@ -105,40 +114,30 @@ where
 // Message handlers
 //
 
-impl<L> Handler<CreateSession> for TcpTransport<L>
+impl<N> Handler<CreateSession> for TcpTransport<N>
 where
-    L: Logic + 'static,
-    L::Context: AsyncContext<L>,
+    N: Network + 'static,
+    N::Context: AsyncContext<N>,
 {
-    type Result = EmptyResponse;
+    type Result = NoResult;
 
-    fn handle(&mut self, msg: CreateSession, _: &mut Context<Self>)
-    {
+    fn handle(&mut self, msg: CreateSession, _: &mut Context<Self>) {
         let address = msg.stream.peer_addr().unwrap();
         let initiator = false;
 
-        TcpSession::<L>::run(
-            self.logic.clone(),
-            address,
-            msg.stream,
-            initiator
-        );
+        TcpSession::<N>::run(self.network.clone(), address, msg.stream, initiator);
     }
 }
 
-impl<L> Handler<Connect> for TcpTransport<L>
+impl<N> Handler<Connect> for TcpTransport<N>
 where
-    L: Logic + 'static,
-    L::Context: AsyncContext<L>,
+    N: Network + 'static,
+    N::Context: AsyncContext<N>,
 {
-    type Result = FutureResponse;
+    type Result = EmptyResult;
 
-    fn handle(&mut self, msg: Connect, _: &mut Context<Self>)
-        -> Self::Result
-    {
-        let logic = self.logic.clone();
-        let result = future::ok(());
-
+    fn handle(&mut self, msg: Connect, _: &mut Context<Self>) -> Self::Result {
+        let network = self.network.clone();
         let future = TcpStream::connect(&msg.address)
             .map_err(move |e| {
                 eprintln!("Connect error {}", e);
@@ -147,133 +146,109 @@ where
                 let address = stream.peer_addr().unwrap();
                 let initiator = true;
 
-                TcpSession::run(
-                    logic,
-                    address,
-                    stream,
-                    initiator
-                );
+                TcpSession::run(network, address, stream, initiator);
 
                 future::ok(())
             });
 
         Arbiter::handle().spawn(future);
-        Ok(Box::new(result))
+        Ok(())
     }
 }
 
-impl<L> Handler<Stop> for TcpTransport<L>
+impl<N> Handler<Stop> for TcpTransport<N>
 where
-    L: Logic + 'static,
-    L::Context: AsyncContext<L>,
+    N: Network + 'static,
+    N::Context: AsyncContext<N>,
 {
-    type Result = FutureResponse;
+    type Result = EmptyResult;
 
-    fn handle(&mut self, _: Stop, ctx: &mut Context<Self>)
-        -> FutureResponse
-    {
+    fn handle(&mut self, _: Stop, ctx: &mut Context<Self>) -> Self::Result {
         ctx.stop();
-
-        let future = future::ok(());
-        Ok(Box::new(future))
+        Ok(())
     }
 }
 
-//
-// TCP session
-//
-
-pub struct TcpSession<L>
+/// TCP session actor
+pub struct TcpSession<N>
 where
-    L: Logic + 'static,
-    L::Context: AsyncContext<L>,
+    N: Network + 'static,
+    N::Context: AsyncContext<N>,
 {
-    /// Session logic
-    logic: LogicAddr<L>,
+    /// Session network
+    network: NetAddr<N>,
     /// Remote address
     address: net::SocketAddr,
     /// Framed writer
     writer: FramedWrite<WriteHalf<TcpStream>, MessageCodec>,
     /// Own actor address
-    actor: TcpSessionAddr<L>,
+    actor: TcpSessionAddr<N>,
     /// Whether session was initiated by us
     initiator: bool,
 }
 
-impl<L> TcpSession<L>
+impl<N> TcpSession<N>
 where
-    L: Logic + 'static,
-    L::Context: AsyncContext<L>,
+    N: Network + 'static,
+    N::Context: AsyncContext<N>,
 {
     fn run(
-        logic: LogicAddr<L>,
+        network: NetAddr<N>,
         address: net::SocketAddr,
         stream: TcpStream,
         initiator: bool,
-    )   -> TcpSessionAddr<L>
-    {
+    ) -> TcpSessionAddr<N> {
         TcpSession::create(move |ctx| {
             let (read, write) = stream.split();
             let reader = FramedRead::new(read, MessageCodec);
             let writer = FramedWrite::new(write, MessageCodec, ctx);
 
             TcpSession::add_stream(reader, ctx);
-            TcpSession{
-                logic,
+            TcpSession {
+                network,
                 address,
                 writer,
                 actor: ctx.address(),
-                initiator
+                initiator,
             }
         })
     }
 }
 
-impl<L> WriteHandler<CodecError> for TcpSession<L>
+impl<N> WriteHandler<CodecError> for TcpSession<N>
 where
-    L: Logic + 'static,
-    L::Context: AsyncContext<L>,
+    N: Network + 'static,
+    N::Context: AsyncContext<N>,
 {}
 
-//
-// TCP session actor
-//
-
-impl<L> Actor for TcpSession<L>
+impl<N> Actor for TcpSession<N>
 where
-    L: Logic + 'static,
-    L::Context: AsyncContext<L>,
+    N: Network + 'static,
+    N::Context: AsyncContext<N>,
 {
     type Context = Context<Self>;
 
-    fn started(&mut self, _: &mut <Self as Actor>::Context)
-    {
+    fn started(&mut self, _: &mut <Self as Actor>::Context) {
         let session = self.actor.clone();
         let msg = Connected {
-            transport: Transport::Tcp,
+            transport: TransportProtocol::Tcp,
             address: self.address.clone(),
             session: TransportSession::Tcp(session),
-            initiator: self.initiator
+            initiator: self.initiator,
         };
 
-        let future = self.logic
-            .send(msg)
-            .map_err(|_| {});
+        let future = self.network.send(msg).map_err(|_| {});
 
         Arbiter::handle().spawn(future);
     }
 
-    fn stopping(&mut self, _ctx: &mut Self::Context)
-        -> Running
-    {
+    fn stopping(&mut self, _ctx: &mut Self::Context) -> Running {
         let msg = Disconnected {
-            transport: Transport::Tcp,
+            transport: TransportProtocol::Tcp,
             address: self.address.clone(),
         };
 
-        let future = self.logic
-            .send(msg)
-            .map_err(|_| {});
+        let future = self.network.send(msg).map_err(|_| {});
 
         Arbiter::handle().spawn(future);
         Running::Stop
@@ -281,39 +256,35 @@ where
 }
 
 //
-// TCP session message handlers
+// Message handlers
 //
 
-impl<L> StreamHandler<Message, CodecError> for TcpSession<L>
+impl<N> StreamHandler<Message, CodecError> for TcpSession<N>
 where
-    L: Logic + 'static,
-    L::Context: AsyncContext<L>,
+    N: Network + 'static,
+    N::Context: AsyncContext<N>,
 {
-    fn handle(&mut self, msg: Message, _ctx: &mut Self::Context)
-    {
-        let msg = Received{
-            transport: Transport::Tcp,
+    fn handle(&mut self, msg: Message, _ctx: &mut Self::Context) {
+        let msg = ReceivedMessage {
+            transport: TransportProtocol::Tcp,
             address: self.address.clone(),
             message: msg,
         };
 
-        let future = self.logic
-            .send(msg)
-            .map_err(|_| {});
+        let future = self.network.send(msg).map_err(|_| {});
 
         Arbiter::handle().spawn(future);
     }
 }
 
-impl<L> Handler<SessionSendMessage> for TcpSession<L>
+impl<N> Handler<SessionSendMessage> for TcpSession<N>
 where
-    L: Logic + 'static,
-    L::Context: AsyncContext<L>,
+    N: Network + 'static,
+    N::Context: AsyncContext<N>,
 {
-    type Result = EmptyResponse;
+    type Result = NoResult;
 
-    fn handle(&mut self, msg: SessionSendMessage, _ctx: &mut Self::Context)
-    {
+    fn handle(&mut self, msg: SessionSendMessage, _ctx: &mut Self::Context) {
         if self.writer.closed() {
             eprintln!("Trying to write to a closed TCP stream ({})", self.address);
             return;
@@ -323,19 +294,15 @@ where
     }
 }
 
-impl<L> Handler<Stop> for TcpSession<L>
+impl<N> Handler<Stop> for TcpSession<N>
 where
-    L: Logic + 'static,
-    L::Context: AsyncContext<L>,
+    N: Network + 'static,
+    N::Context: AsyncContext<N>,
 {
-    type Result = FutureResponse;
+    type Result = EmptyResult;
 
-    fn handle(&mut self, _: Stop, ctx: &mut Self::Context)
-        -> FutureResponse
-    {
+    fn handle(&mut self, _: Stop, ctx: &mut Self::Context) -> Self::Result {
         ctx.stop();
-
-        let result = future::ok(());
-        Ok(Box::new(result))
+        Ok(())
     }
 }
