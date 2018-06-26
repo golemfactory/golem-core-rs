@@ -15,20 +15,42 @@ use super::network::Network;
 /// Available transport protocols
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
 pub enum TransportProtocol {
-    Tcp = 6,
-    Udp = 17,
+    Tcp,
+    Udp,
     Unsupported,
 }
 
-impl From<u16> for TransportProtocol {
-    fn from(value: u16) -> Self {
-        match value {
-            6 => TransportProtocol::Tcp,
-            17 => TransportProtocol::Udp,
-            _ => TransportProtocol::Unsupported,
-        }
+macro_rules! _impl_into {
+    ($($into:ty),+) => {
+        $(impl Into<$into> for TransportProtocol {
+            fn into(self) -> $into {
+                match self {
+                    TransportProtocol::Tcp => 6,
+                    TransportProtocol::Udp => 17,
+                    TransportProtocol::Unsupported => 0,
+                }
+            }
+        })*
     }
 }
+
+macro_rules! _impl_from {
+    ($($from:ty),+) => {
+        $(impl From<$from> for TransportProtocol {
+            fn from(value: $from) -> Self {
+                match value {
+                    6 => TransportProtocol::Tcp,
+                    17 => TransportProtocol::Udp,
+                    _ => TransportProtocol::Unsupported,
+                }
+            }
+        })*
+    }
+}
+
+_impl_into!(u8, u16, u32, i8, i16, i32);
+_impl_from!(u8, u16, u32, i8, i16, i32);
+
 
 impl fmt::Display for TransportProtocol {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
