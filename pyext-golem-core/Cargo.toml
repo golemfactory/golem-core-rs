@@ -1,0 +1,23 @@
+[package]
+name ="pyext-golem-core"
+version = "0.1.0"
+
+[lib]
+name = "golem_core"
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[dependencies]
+actix = "0.5"
+cpython = "0.1"
+futures = "0.1"
+
+net = { version = "0.1", path = "../net" }
+
+[dependencies.pyo3]
+version = "0.2"
+default-features = false
+
+[dependencies.spin]
+version = "0.4"
+default-features = false

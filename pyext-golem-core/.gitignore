@@ -1,0 +1,6 @@
+/dist
+/build
+/target
+/venv
+**/*.rs.bk
+**/*.py[c|d]
