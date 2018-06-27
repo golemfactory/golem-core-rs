@@ -130,7 +130,7 @@ py_class!(class CoreNetwork |py| {
     }
 });
 
-py_module_initializer!(golem_core, initgolem_core, PyInit_golem_core, |py, m| {
+py_module_initializer!(libgolem_core, initlibgolem_core, PyInit_libgolem_core, |py, m| {
     try!(m.add(py, "__doc__", "Rust implementation of golem-core."));
     try!(m.add(py, "CoreNetwork", py.get_type::<CoreNetwork>()));
     try!(m.add(py, "CoreError", py.get_type::<CoreError>()));

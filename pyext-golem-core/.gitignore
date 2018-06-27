@@ -2,5 +2,9 @@
 /build
 /target
 /venv
+**/*.egg-info
 **/*.rs.bk
 **/*.py[c|d]
+**/*.so
+**/*.lib
+**/*.dll

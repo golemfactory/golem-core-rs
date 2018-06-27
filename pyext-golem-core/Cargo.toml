@@ -3,7 +3,7 @@ name ="pyext-golem-core"
 version = "0.1.0"
 
 [lib]
-name = "golem_core"
+name = "libgolem_core"
 crate-type = ["cdylib"]
 path = "src/lib.rs"
 

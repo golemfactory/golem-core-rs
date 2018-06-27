@@ -8,7 +8,7 @@ setup(
 
     packages=['golem_core'],
     rust_extensions=[RustExtension(
-        'golem_core._golem_core',
+        'libgolem_core',
         'Cargo.toml',
         binding=Binding.PyO3
     )],
