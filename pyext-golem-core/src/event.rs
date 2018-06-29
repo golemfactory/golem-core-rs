@@ -1,4 +1,4 @@
-use cpython::{PyTuple, ToPyObject};
+use cpython::{PyTuple, Python, ToPyObject};
 use std::net::SocketAddr;
 
 use net::codec::message::Encapsulated;
@@ -18,18 +18,19 @@ pub enum CoreEvent {
     Log(LogLevel, String),
 }
 
-impl Into<PyTuple> for CoreEvent {
-    fn into(self) -> PyTuple {
+impl CoreEvent {
+    pub fn make_py_tuple(self, py: Python) -> PyTuple {
         match self {
-            CoreEvent::Exiting => py_from!((0,)),
-            CoreEvent::Started(t) => py_from!((1, t as u16,)),
-            CoreEvent::Stopped(t) => py_from!((2, t as u16,)),
-            CoreEvent::Connected(t, a) => py_from!((100, t as u16, host_port(&a),)),
-            CoreEvent::Disconnected(t, a) => py_from!((101, t as u16, host_port(&a),)),
-            CoreEvent::Message(t, a, e) => {
-                py_from!((102, t as u16, host_port(&a), (e.protocol_id, e.message),))
-            }
-            CoreEvent::Log(l, m) => py_from!((200, l, m,)),
+            CoreEvent::Exiting => py_wrap!(py, (0,)),
+            CoreEvent::Started(t) => py_wrap!(py, (1, t as u16,)),
+            CoreEvent::Stopped(t) => py_wrap!(py, (2, t as u16,)),
+            CoreEvent::Connected(t, a) => py_wrap!(py, (100, t as u16, host_port(&a),)),
+            CoreEvent::Disconnected(t, a) => py_wrap!(py, (101, t as u16, host_port(&a),)),
+            CoreEvent::Message(t, a, e) => py_wrap!(
+                py,
+                (102, t as u16, host_port(&a), (e.protocol_id, e.message),)
+            ),
+            CoreEvent::Log(l, m) => py_wrap!(py, (200, l, m,)),
         }
     }
 }

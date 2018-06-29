@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
-use cpython::{PyInt, PyLong, PyObject, PyString, ToPyObject};
+use cpython::{PyInt, PyLong, PyObject, PyString, Python, ToPyObject};
 
 use error::*;
 use net::socket_address;
@@ -15,86 +15,52 @@ pub type PyShared = Arc<Mutex<Option<PyObject>>>;
 /// Convert a Python value to a native type
 #[macro_export]
 macro_rules! py_extract {
-    ($input:expr, $to:tt) => {{
-        use cpython::{PyErr, Python, PythonObject};
+    ($input:expr) => {{
+        use cpython::Python;
 
         let gil = Python::acquire_gil();
         let py = gil.python();
-        let result: Result<$to, PyErr> = $input.into_object().extract(py);
 
+        py_extract!(py, $input)
+    }};
+    ($py:expr, $input:expr) => {{
+        use cpython::PythonObject;
+
+        $input.into_object().extract($py)
+    }};
+    ($py:expr, $input:expr, $to:ty) => {{
+        use cpython::{PyErr, PythonObject};
+
+        let result: Result<$to, PyErr> = $input.into_object().extract($py);
         result
     }};
 }
 
 /// Convert a native type value to Python type
 #[macro_export]
-macro_rules! py_from {
-    ($input:expr) => {{
-        use cpython::Python;
-
-        let gil = Python::acquire_gil();
-        let py = gil.python();
-        $input.to_py_object(py)
+macro_rules! py_wrap {
+    ($py:expr, $input:expr) => {{
+        $input.to_py_object($py)
     }};
-    ($input:expr, $to:ty) => {{
-        use cpython::{ObjectProtocol, Python};
-
-        let gil = Python::acquire_gil();
-        let py = gil.python();
-        let result: $to = $input.to_py_object(py);
-
+    ($py:expr, $input:expr, $to:ty) => {{
+        let result: $to = $input.to_py_object($py);
         result
-    }};
-}
-
-/// Creates a RefCell'ed Option of PyObject
-#[macro_export]
-macro_rules! py_to_shared {
-    ($py_obj:expr) => {{
-        use std::cell::RefCell;
-        RefCell::new(Some($py_obj))
-    }};
-}
-
-/// Calls a RefCell'ed Option of PyObject
-#[macro_export]
-macro_rules! py_call {
-    ($py_obj:expr) => {{
-        py_call!($py_obj, (), None)
-    }};
-    ($py_obj:expr, $args:expr) => {{
-        py_call!($py_obj, $args, None)
-    }};
-    ($py_obj:expr, $args:expr, $kwargs:expr) => {{
-        use cpython::Python;
-
-        if let Some(ref callable) = *$py_obj.borrow() {
-            let gil = Python::acquire_gil();
-            let py = gil.python();
-
-            try!(callable.call(py, $args, $kwargs))
-        }
     }};
 }
 
 /// Calls a method of a RefCell'ed Option of PyObject
 macro_rules! py_call_method {
-    ($py_obj:expr, $method:expr) => {{
-        py_call_method!($py_obj, $method, (), None)
+    ($py:expr, $py_obj:expr, $method:expr) => {{
+        py_call_method!($py, $py_obj, $method, (), None)
     }};
-    ($py_obj:expr, $method:expr, $args:expr) => {{
-        py_call_method!($py_obj, $method, $args, None)
+    ($py:expr, $py_obj:expr, $method:expr, $args:expr) => {{
+        py_call_method!($py, $py_obj, $method, $args, None)
     }};
-    ($py_obj:expr, $method:expr, $args:expr, $kwargs:expr) => {{
-        use cpython::Python;
-
+    ($py:expr, $py_obj:expr, $method:expr, $args:expr, $kwargs:expr) => {{
         if let Some(ref obj) = *$py_obj.lock().unwrap() {
-            let gil = Python::acquire_gil();
-            let py = gil.python();
-
-            match obj.getattr(py, $method) {
+            match obj.getattr($py, $method) {
                 Ok(method) => {
-                    if let Err(_) = method.call(py, $args, $kwargs) {
+                    if let Err(_) = method.call($py, $args, $kwargs) {
                         eprintln!("Core: cannot call a Python method");
                     }
                 }
@@ -124,17 +90,23 @@ pub fn host_port(address: &SocketAddr) -> (String, u16) {
 }
 
 pub fn to_socket_address(py_host: PyString, py_port: PyLong) -> Result<SocketAddr, ModuleError> {
-    let host = py_extract!(py_host, String)?;
-    let port = py_extract!(py_port, u16)?;
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+
+    let host: String = py_extract!(py, py_host)?;
+    let port: u16 = py_extract!(py, py_port)?;
     let address: SocketAddr = socket_address(&host, port)?;
 
     Ok(address)
 }
 
 pub fn from_socket_address(address: SocketAddr) -> (PyString, PyInt) {
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+
     let (host, port) = host_port(&address);
-    let py_host: PyString = py_from!(host);
-    let py_port: PyInt = py_from!(port);
+    let py_host: PyString = py_wrap!(py, host);
+    let py_port: PyInt = py_wrap!(py, port);
 
     (py_host, py_port)
 }
@@ -145,14 +117,14 @@ pub fn from_socket_address(address: SocketAddr) -> (PyString, PyInt) {
 
 #[cfg(test)]
 mod tests {
-    use cpython::{PyLong, Python, ToPyObject};
+    use cpython::{Python, ToPyObject};
 
     #[test]
     fn extract() {
         let gil = Python::acquire_gil();
         let py = gil.python();
-        let py_long: PyLong = 5_i32.to_py_object(py);
+        let value: u16 = py_extract!(5_i32.to_py_object(py)).unwrap();
 
-        assert_eq!(5_u16, py_extract!(py_long, u16).unwrap());
+        assert_eq!(5_u16, value);
     }
 }

@@ -16,17 +16,13 @@ pub mod event;
 pub mod logging;
 pub mod network;
 
-use std::sync::{Arc, Mutex};
 use cpython::*;
+use std::sync::{Arc, Mutex};
 
 use core::*;
-use error::*;
 use python::*;
 
-static mut CORE: Core = Core {
-    network: None,
-    rx: None,
-};
+static mut CORE: Core = Core { network: None };
 
 py_exception!(golem_core, CoreError);
 py_class!(class CoreNetwork |py| {
@@ -53,21 +49,9 @@ py_class!(class CoreNetwork |py| {
                 return Ok(false);
             }
 
-            match CORE.run(host, port) {
-                Ok(_) => {
-                    let queue = self.queue(py).clone();
-                    match CORE.run_rx_queue(queue) {
-                        true => Ok(true),
-                        false => {
-                            let err = ModuleError::new(
-                                ErrorKind::Other,
-                                "rx channel end error",
-                                None
-                            );
-                            Err(err.into())
-                        },
-                    }
-                },
+            let queue = self.queue(py).clone();
+            match CORE.run(queue, host, port) {
+                Ok(_) => Ok(true),
                 Err(e) => Err(e.into())
             }
         }
@@ -115,7 +99,7 @@ py_class!(class CoreNetwork |py| {
         host: PyString,
         port: PyLong,
         protocol_id: PyLong,
-        message: Vec<u8>
+        message: PyBytes
     ) -> PyResult<bool> {
         unsafe {
             if CORE.running() {
@@ -130,9 +114,14 @@ py_class!(class CoreNetwork |py| {
     }
 });
 
-py_module_initializer!(libgolem_core, initlibgolem_core, PyInit_libgolem_core, |py, m| {
-    try!(m.add(py, "__doc__", "Rust implementation of golem-core."));
-    try!(m.add(py, "CoreNetwork", py.get_type::<CoreNetwork>()));
-    try!(m.add(py, "CoreError", py.get_type::<CoreError>()));
-    Ok(())
-});
+py_module_initializer!(
+    libgolem_core,
+    initlibgolem_core,
+    PyInit_libgolem_core,
+    |py, m| {
+        try!(m.add(py, "__doc__", "Rust implementation of golem-core."));
+        try!(m.add(py, "CoreNetwork", py.get_type::<CoreNetwork>()));
+        try!(m.add(py, "CoreError", py.get_type::<CoreError>()));
+        Ok(())
+    }
+);
