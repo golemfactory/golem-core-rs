@@ -26,3 +26,4 @@ class TransportProtocol(_IntConversionMixin, Enum):
 
     Tcp = 6
     Udp = 17
+    Unsupported = 0

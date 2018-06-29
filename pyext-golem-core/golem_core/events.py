@@ -1,4 +1,6 @@
 import inspect
+import sys
+
 from abc import ABCMeta
 from typing import Tuple
 
@@ -32,9 +34,9 @@ class Connected(BaseEvent):
     ID = 100
 
     def __init__(
-            self,
-            transport_protocol: TransportProtocol,
-            address: Tuple[str, int],
+        self,
+        transport_protocol: TransportProtocol,
+        address: Tuple[str, int],
     ) -> None:
 
         self.transport_protocol = transport_protocol
@@ -45,9 +47,9 @@ class Disconnected(BaseEvent):
     ID = 101
 
     def __init__(
-            self,
-            transport_protocol: TransportProtocol,
-            address: Tuple[str, int],
+        self,
+        transport_protocol: TransportProtocol,
+        address: Tuple[str, int],
     ) -> None:
 
         self.transport_protocol = transport_protocol
@@ -58,10 +60,10 @@ class Message(BaseEvent):
     ID = 102
 
     def __init__(
-            self,
-            transport_protocol: TransportProtocol,
-            address: Tuple[str, int],
-            encapsulated: Encapsulated,
+        self,
+        transport_protocol: TransportProtocol,
+        address: Tuple[str, int],
+        encapsulated: Encapsulated,
     ) -> None:
 
         self.transport_protocol = transport_protocol
@@ -73,10 +75,10 @@ class Log(BaseEvent):
     ID = 200
 
     def __init__(
-            self,
-            transport_protocol: TransportProtocol,
-            address: Tuple[str, int],
-            encapsulated: Encapsulated,
+        self,
+        transport_protocol: TransportProtocol,
+        address: Tuple[str, int],
+        encapsulated: Encapsulated,
     ) -> None:
 
         self.transport_protocol = transport_protocol
@@ -85,14 +87,16 @@ class Log(BaseEvent):
 
 
 def _collect_events():
+    module = sys.modules[__name__]
     es = inspect.getmembers(
-        sys.modules[__name__],
-        lambda c: (
-                isinstance(c, BaseEvent) and
-                c is not BaseEvent
+        module,
+        lambda c: bool(
+            inspect.isclass(c) and
+            c is not BaseEvent and
+            issubclass(c, BaseEvent)
         )
     )
-    return {e.ID: e for e in es}
+    return {e.ID: e for _, e in es}
 
 
 class CoreEvent:
@@ -100,7 +104,7 @@ class CoreEvent:
     core_events = _collect_events()
 
     @classmethod
-    def convert_from(cls, *payload) -> BaseEvent:
+    def convert_from(cls, payload) -> BaseEvent:
         if len(payload) < 1:
             raise ValueError("Event ID is missing")
 
