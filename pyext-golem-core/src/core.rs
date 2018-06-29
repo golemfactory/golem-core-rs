@@ -66,7 +66,6 @@ impl Core {
         py_host: PyString,
         py_port: PyLong,
     ) -> Result<(), ModuleError> {
-        // convert to socket address
         let address = to_socket_address(py_host, py_port)?;
         // start callback channel
         let (tx, rx) = unbounded();
@@ -99,7 +98,7 @@ impl Core {
             sys.run();
         });
 
-        // receive and return the (syn) logic address
+        // retrieve the (syn) network actor address
         let result = rx_init.recv()?;
         match result {
             Ok(a) => {
