@@ -48,7 +48,7 @@ macro_rules! py_wrap {
     }};
 }
 
-/// Calls a method of a RefCell'ed Option of PyObject
+/// Calls a method of a PyShared object
 macro_rules! py_call_method {
     ($py:expr, $py_obj:expr, $method:expr) => {{
         py_call_method!($py, $py_obj, $method, (), None)
@@ -74,19 +74,20 @@ macro_rules! py_call_method {
 // Helper functions
 //
 
-pub fn host_port(address: &SocketAddr) -> (String, u16) {
-    match address {
-        SocketAddr::V4(a) => {
-            let host = format!("{}", a.ip());
-            let port: u16 = a.port();
-            (host, port)
-        }
-        SocketAddr::V6(a) => {
-            let host = format!("{}", a.ip());
-            let port: u16 = a.port();
-            (host, port)
-        }
+struct SocketAddrWrapper<'a> {
+    address: &'a SocketAddr,
+}
+
+impl<'a> Into<(String, u16)> for SocketAddrWrapper<'a> {
+    fn into(self) -> (String, u16) {
+        let host = format!("{}", self.address.ip());
+        let port: u16 = self.address.port();
+        (host, port)
     }
+}
+
+pub fn host_port(address: &SocketAddr) -> (String, u16) {
+    SocketAddrWrapper{ address: &address }.into()
 }
 
 pub fn to_socket_address(py_host: PyString, py_port: PyLong) -> Result<SocketAddr, ModuleError> {

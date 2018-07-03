@@ -87,8 +87,6 @@ impl Handler<Stop> for NetworkCore {
     fn handle(&mut self, m: Stop, ctx: &mut Self::Context) -> Self::Result {
         self.transport_send(&self.tcp, m.clone())?;
         self.transport_send(&self.udp, m)?;
-
-        ctx.stop();
         Ok(())
     }
 }
@@ -98,13 +96,13 @@ impl Handler<Stopped<NetworkCore>> for NetworkCore {
     type Result = NoResult;
 
     fn handle(&mut self, m: Stopped<NetworkCore>, ctx: &mut Self::Context) {
-        match m.0 {
+        match m.actor {
             Transport::Tcp(_) => {
-                self.tx_send(CoreEvent::Stopped(TransportProtocol::Tcp));
+                self.tx_send(CoreEvent::Stopped(TransportProtocol::Tcp, m.address));
                 self.tcp = None;
             }
             Transport::Udp(_) => {
-                self.tx_send(CoreEvent::Stopped(TransportProtocol::Udp));
+                self.tx_send(CoreEvent::Stopped(TransportProtocol::Udp, m.address));
                 self.udp = None;
             }
         };
@@ -153,7 +151,7 @@ impl Handler<Connected<NetworkCore>> for NetworkCore {
     type Result = NoResult;
 
     fn handle(&mut self, m: Connected<NetworkCore>, _ctx: &mut Self::Context) {
-        let event = CoreEvent::Connected(m.transport.clone(), m.address.clone());
+        let event = CoreEvent::Connected(m.transport.clone(), m.address.clone(), m.initiator);
         self.sessions.add(m.transport, m.address, m.session);
         self.tx_send(event);
     }
@@ -194,7 +192,7 @@ impl Handler<Listening<NetworkCore>> for NetworkCore {
     type Result = NoResult;
 
     fn handle(&mut self, m: Listening<NetworkCore>, _ctx: &mut Self::Context) {
-        let transport = match m.0 {
+        let transport = match m.actor {
             Transport::Tcp(t) => {
                 self.tcp = Some(t);
                 TransportProtocol::Tcp
@@ -205,7 +203,7 @@ impl Handler<Listening<NetworkCore>> for NetworkCore {
             }
         };
 
-        let event = CoreEvent::Started(transport);
+        let event = CoreEvent::Started(transport, m.address);
         self.tx_send(event);
     }
 }

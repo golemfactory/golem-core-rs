@@ -44,7 +44,7 @@ impl Actor for Bridge {
                 let gil = Python::acquire_gil();
                 let py = gil.python();
 
-                let event = event.make_py_tuple(py);
+                let event: PyTuple = event.make_py_tuple(py);
                 let args: PyTuple = py_wrap!(py, (event,));
                 py_call_method!(py, queue, "put", args, None);
 
@@ -114,6 +114,12 @@ impl Core {
             Some(_) => true,
             None => false,
         }
+    }
+
+    pub fn stop(&self) -> Result<(), ModuleError> {
+        self.network_send(Stop(TransportProtocol::Tcp))?;
+        self.network_send(Stop(TransportProtocol::Udp))?;
+        Ok(())
     }
 }
 
