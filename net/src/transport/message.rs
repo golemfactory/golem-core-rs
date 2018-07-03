@@ -76,10 +76,14 @@ unsafe impl Send for ReceivedMessage {}
 
 #[derive(Message)]
 #[rtype(result = "NoResult")]
-pub struct Listening<N>(pub Transport<N>)
+pub struct Listening<N>
 where
     N: Network + 'static,
-    N::Context: actix::AsyncContext<N>;
+    N::Context: actix::AsyncContext<N>
+{
+    pub actor: Transport<N>,
+    pub address: net::SocketAddr,
+}
 
 unsafe impl<N> Send for Listening<N>
 where
@@ -89,10 +93,14 @@ where
 
 #[derive(Message)]
 #[rtype(result = "NoResult")]
-pub struct Stopped<N>(pub Transport<N>)
+pub struct Stopped<N>
 where
     N: Network + 'static,
-    N::Context: actix::AsyncContext<N>;
+    N::Context: actix::AsyncContext<N>
+{
+    pub actor: Transport<N>,
+    pub address: net::SocketAddr,
+}
 
 unsafe impl<N> Send for Stopped<N>
 where

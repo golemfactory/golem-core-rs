@@ -150,8 +150,9 @@ where
     type Context = Context<Self>;
 
     fn started(&mut self, _: &mut <Self as Actor>::Context) {
-        let actor = self.actor.clone();
-        let msg = Listening(Transport::Udp(actor));
+        let actor = Transport::Udp(self.actor.clone());
+        let address = self.address.clone();
+        let msg = Listening{ actor, address };
 
         let future = self.logic.send(msg).map_err(|_| {});
 
@@ -159,8 +160,9 @@ where
     }
 
     fn stopping(&mut self, _ctx: &mut Self::Context) -> Running {
-        let actor = self.actor.clone();
-        let msg = Stopped(Transport::Udp(actor));
+        let actor = Transport::Udp(self.actor.clone());
+        let address = self.address.clone();
+        let msg = Stopped{ actor, address };
 
         let future = self.logic.send(msg).map_err(|_| {});
 

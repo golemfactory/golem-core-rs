@@ -164,7 +164,7 @@ impl Handler<Stopped<App>> for App {
     type Result = ();
 
     fn handle(&mut self, m: Stopped<App>, ctx: &mut Self::Context) {
-        match m.0 {
+        match m.actor {
             Transport::Tcp(_) => {
                 println!("App: TCP transport stopped");
                 self.tcp = None;
@@ -271,7 +271,7 @@ impl Handler<Listening<App>> for App {
     type Result = ();
 
     fn handle(&mut self, m: Listening<App>, _ctx: &mut Self::Context) {
-        match m.0 {
+        match m.actor {
             Transport::Tcp(t) => {
                 println!("App: TCP transport registered");
                 self.tcp = Some(t);

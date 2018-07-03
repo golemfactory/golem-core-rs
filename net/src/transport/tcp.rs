@@ -56,6 +56,9 @@ where
             Err(_) => return Err(Box::new(cannot_listen_error("TCP", &address))),
         };
 
+        // store the actual IP address and port
+        let address = listener.local_addr()?;
+
         let router = TcpTransport::create(move |ctx| {
             let flow = listener
                 .incoming()
@@ -85,8 +88,9 @@ where
     type Context = Context<Self>;
 
     fn started(&mut self, _ctx: &mut Self::Context) {
-        let router = Transport::Tcp(self.actor.clone());
-        let msg = Listening(router);
+        let actor = Transport::Tcp(self.actor.clone());
+        let address = self.address.clone();
+        let msg = Listening{ actor, address };
 
         let future = self
             .network
@@ -97,8 +101,9 @@ where
     }
 
     fn stopping(&mut self, _ctx: &mut Self::Context) -> Running {
-        let router = Transport::Tcp(self.actor.clone());
-        let msg = Stopped(router);
+        let actor = Transport::Tcp(self.actor.clone());
+        let address = self.address.clone();
+        let msg = Stopped{ actor, address };
 
         let future = self
             .network
