@@ -24,7 +24,7 @@ use python::*;
 
 static mut CORE: Core = Core { network: None };
 
-py_exception!(golem_core, CoreError);
+py_exception!(libgolem_core, CoreError);
 py_class!(class CoreNetwork |py| {
     data queue: PyShared;
 
@@ -57,6 +57,19 @@ py_class!(class CoreNetwork |py| {
         }
     }
 
+    def stop(&self) -> PyResult<bool> {
+        unsafe {
+            if !CORE.running() {
+                return Ok(false);
+            }
+
+            match CORE.stop() {
+                Ok(_) => Ok(true),
+                Err(e) => Err(e.into())
+            }
+        }
+    }
+
     def connect(
         &self,
         protocol: PyLong,
@@ -64,7 +77,7 @@ py_class!(class CoreNetwork |py| {
         port: PyLong
     ) -> PyResult<bool> {
         unsafe {
-            if CORE.running() {
+            if !CORE.running() {
                 return Ok(false);
             }
 
@@ -82,7 +95,7 @@ py_class!(class CoreNetwork |py| {
         port: PyLong
     ) -> PyResult<bool> {
         unsafe {
-            if CORE.running() {
+            if !CORE.running() {
                 return Ok(false);
             }
 
@@ -102,7 +115,7 @@ py_class!(class CoreNetwork |py| {
         message: PyBytes
     ) -> PyResult<bool> {
         unsafe {
-            if CORE.running() {
+            if !CORE.running() {
                 return Ok(false);
             }
 
