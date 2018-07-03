@@ -1,8 +1,7 @@
-from libgolem_core import *
+from libgolem_core import CoreNetwork, CoreError
 
 
-class Encapsulated:
-
-    def __init__(self, protocol_id: int, message: bytes):
-        self.protocol_id = protocol_id
-        self.message = message
+__all__ = (
+    'CoreNetwork',
+    'CoreError',
+)

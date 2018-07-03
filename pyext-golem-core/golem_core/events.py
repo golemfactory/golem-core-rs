@@ -4,70 +4,74 @@ import sys
 from abc import ABCMeta
 from typing import Tuple
 
-from . import Encapsulated
-from .enums import TransportProtocol
+from .enums import TransportProtocol, LogLevel
+from .structs import Encapsulated
+
+
+__all__ = (
+    'CoreEvent',
+    'BaseEvent',
+    'Exiting',
+    'Started',
+    'Stopped',
+    'Connected',
+    'Disconnected',
+    'Message',
+    'Log',
+)
 
 
 class BaseEvent(metaclass=ABCMeta):
-    pass
+    ID = None
+
+
+class TransportAndAddressEvent(BaseEvent, metaclass=ABCMeta):
+
+    def __init__(self,
+                 transport_id: int,
+                 address: Tuple[str, int]) -> None:
+
+        self.transport_protocol = TransportProtocol.convert_from(transport_id)
+        self.address = address
 
 
 class Exiting(BaseEvent):
     ID = 0
 
 
-class Started(BaseEvent):
+class Started(TransportAndAddressEvent):
     ID = 1
 
-    def __init__(self, transport_protocol: TransportProtocol) -> None:
-        self.transport_protocol = transport_protocol
 
-
-class Stopped(BaseEvent):
+class Stopped(TransportAndAddressEvent):
     ID = 2
 
-    def __init__(self, transport_protocol: TransportProtocol) -> None:
-        self.transport_protocol = transport_protocol
 
-
-class Connected(BaseEvent):
+class Connected(TransportAndAddressEvent):
     ID = 100
 
-    def __init__(
-        self,
-        transport_protocol: TransportProtocol,
-        address: Tuple[str, int],
-    ) -> None:
+    def __init__(self,
+                 transport_id: int,
+                 address: Tuple[str, int],
+                 initiator: bool) -> None:
 
-        self.transport_protocol = transport_protocol
-        self.address = address
+        super().__init__(transport_id, address)
+        self.initiator = initiator
 
 
-class Disconnected(BaseEvent):
+class Disconnected(TransportAndAddressEvent):
     ID = 101
 
-    def __init__(
-        self,
-        transport_protocol: TransportProtocol,
-        address: Tuple[str, int],
-    ) -> None:
 
-        self.transport_protocol = transport_protocol
-        self.address = address
-
-
-class Message(BaseEvent):
+class Message(TransportAndAddressEvent):
     ID = 102
 
-    def __init__(
-        self,
-        transport_protocol: TransportProtocol,
-        address: Tuple[str, int],
-        encapsulated: Encapsulated,
-    ) -> None:
+    def __init__(self,
+                 transport_id: int,
+                 address: Tuple[str, int],
+                 encapsulated: Encapsulated) -> None:
 
-        self.transport_protocol = transport_protocol
-        self.address = address
+        super().__init__(transport_id, address)
         self.encapsulated = encapsulated
 
 
@@ -76,14 +80,12 @@ class Log(BaseEvent):
 
     def __init__(
         self,
-        transport_protocol: TransportProtocol,
-        address: Tuple[str, int],
-        encapsulated: Encapsulated,
+        log_level: LogLevel,
+        message: str,
     ) -> None:
 
-        self.transport_protocol = transport_protocol
-        self.address = address
-        self.encapsulated = encapsulated
+        self.log_level = log_level
+        self.message = message
 
 
 def _collect_events():

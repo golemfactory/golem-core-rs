@@ -1,5 +1,10 @@
 from enum import Enum
 
+__all__ = (
+    'LogLevel',
+    'TransportProtocol',
+)
+
 
 class _IntConversionMixin:
 
