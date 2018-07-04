@@ -2,6 +2,7 @@ from enum import Enum
 
 __all__ = (
     'LogLevel',
+    'ErrorKind',
     'TransportProtocol',
 )
 
@@ -25,6 +26,23 @@ class LogLevel(_IntConversionMixin, Enum):
 
     def __str__(self):
         return self.name.lower()
+
+
+class ErrorKind(Enum):
+
+    Io = 'Io'
+    Network = 'Network'
+    Mailbox = 'Mailbox'
+    Python = 'Python'
+    Other = 'Other'
+
+    @staticmethod
+    def from_core_error(error):
+        error_str = str(error)
+        for kind in ErrorKind:
+            if error_str.startswith(kind.value):
+                return kind
+        return ErrorKind.Python
 
 
 class TransportProtocol(_IntConversionMixin, Enum):
