@@ -9,9 +9,10 @@ use CoreError;
 
 #[derive(Debug, Clone)]
 pub enum ErrorKind {
-    Python,
-    Network,
     Io,
+    Network,
+    Mailbox,
+    Python,
     Other,
 }
 
@@ -76,7 +77,7 @@ impl convert::From<RecvError> for ModuleError {
 
 impl convert::From<MailboxError> for ModuleError {
     fn from(e: MailboxError) -> Self {
-        ModuleError::new(ErrorKind::Other, &format!("actor mailbox error: {:?}", e), None)
+        ModuleError::new(ErrorKind::Mailbox, &format!("actor mailbox error: {:?}", e), None)
     }
 }
 
