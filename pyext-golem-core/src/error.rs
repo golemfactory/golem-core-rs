@@ -9,9 +9,9 @@ use CoreError;
 
 #[derive(Debug, Clone)]
 pub enum ErrorKind {
-    Parse,
     Python,
     Network,
+    Io,
     Other,
 }
 
@@ -50,45 +50,45 @@ impl error::Error for ModuleError {
     }
 }
 
+impl convert::From<io::Error> for ModuleError {
+    fn from(e: io::Error) -> Self {
+        ModuleError::new(ErrorKind::Io, &format!("io error: {}", e), None)
+    }
+}
+
 impl convert::From<Box<error::Error>> for ModuleError {
     fn from(e: Box<error::Error>) -> Self {
         ModuleError::new(ErrorKind::Other, &format!("error: {}", e), None)
     }
 }
 
-impl convert::From<io::Error> for ModuleError {
-    fn from(e: io::Error) -> Self {
-        ModuleError::new(ErrorKind::Other, &format!("io error: {}", e), None)
-    }
-}
-
 impl convert::From<AddrParseError> for ModuleError {
     fn from(e: AddrParseError) -> Self {
-        ModuleError::new(ErrorKind::Parse, &format!("invalid address: {}", e), None)
+        ModuleError::new(ErrorKind::Other, &format!("address error: {}", e), None)
     }
 }
 
 impl convert::From<RecvError> for ModuleError {
     fn from(e: RecvError) -> Self {
-        ModuleError::new(ErrorKind::Network, &format!("receive error: {}", e), None)
-    }
-}
-
-impl convert::From<PyErr> for ModuleError {
-    fn from(e: PyErr) -> Self {
-        ModuleError::new(ErrorKind::Python, "python error", Some(e))
+        ModuleError::new(ErrorKind::Network, &format!("rx error: {}", e), None)
     }
 }
 
 impl convert::From<MailboxError> for ModuleError {
-    fn from(_: MailboxError) -> Self {
-        ModuleError::new(ErrorKind::Other, "mailbox error", None)
+    fn from(e: MailboxError) -> Self {
+        ModuleError::new(ErrorKind::Other, &format!("actor mailbox error: {:?}", e), None)
     }
 }
 
 impl convert::From<()> for ModuleError {
     fn from(_: ()) -> Self {
         ModuleError::new(ErrorKind::Other, "unknown error", None)
+    }
+}
+
+impl convert::From<PyErr> for ModuleError {
+    fn from(e: PyErr) -> Self {
+        ModuleError::new(ErrorKind::Python, "python error", Some(e))
     }
 }
 
@@ -100,7 +100,7 @@ impl convert::Into<PyErr> for ModuleError {
                 let gil = Python::acquire_gil();
                 let py = gil.python();
 
-                let msg = format!("{:?} error: {}", self.kind, self.message);
+                let msg = format!("{:?} {}", self.kind, self.message);
                 let py_msg = PyString::new(py, &msg[..]);
 
                 PyErr::new::<CoreError, PyString>(py, py_msg)
