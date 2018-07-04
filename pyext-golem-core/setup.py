@@ -10,7 +10,8 @@ setup(
     rust_extensions=[RustExtension(
         'libgolem_core',
         'Cargo.toml',
-        binding=Binding.PyO3
+        binding=Binding.PyO3,
+        debug=False,
     )],
 
     zip_safe=False
