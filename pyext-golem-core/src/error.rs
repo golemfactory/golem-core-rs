@@ -77,7 +77,7 @@ impl convert::From<RecvError> for ModuleError {
 
 impl convert::From<MailboxError> for ModuleError {
     fn from(e: MailboxError) -> Self {
-        ModuleError::new(ErrorKind::Mailbox, &format!("actor mailbox error: {:?}", e), None)
+        ModuleError::new(ErrorKind::Mailbox, &format!("actor error: {:?}", e), None)
     }
 }
 
