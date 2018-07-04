@@ -69,10 +69,10 @@ class Message(TransportAndAddressEvent):
     def __init__(self,
                  transport_id: int,
                  address: Tuple[str, int],
-                 encapsulated: Encapsulated) -> None:
+                 encapsulated: Tuple[int, bytes]) -> None:
 
         super().__init__(transport_id, address)
-        self.encapsulated = encapsulated
+        self.encapsulated = Encapsulated(*encapsulated)
 
 
 class Log(BaseEvent):
