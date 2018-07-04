@@ -1,4 +1,5 @@
 use std::{error, net};
+use std::time::Duration;
 
 use actix::io::{FramedWrite, WriteHandler};
 use actix::prelude::*;
@@ -63,9 +64,16 @@ where
             let flow = listener
                 .incoming()
                 .map_err(|_| ())
-                .map(move |stream| CreateSession {
-                    stream,
-                    initiator: false,
+                .map(move |stream| {
+                    let keep_alive = Some(Duration::new(3, 0));
+                    if let Err(_) = stream.set_keepalive(keep_alive) {
+                        eprintln!("Core: cannot set keepalive for stream {}", address);
+                    }
+
+                    CreateSession {
+                        stream,
+                        initiator: false,
+                    }
                 });
 
             ctx.add_message_stream(flow);
@@ -150,6 +158,11 @@ where
             .and_then(move |stream| {
                 let address = stream.peer_addr().unwrap();
                 let initiator = true;
+
+                let keep_alive = Some(Duration::new(3, 0));
+                if let Err(_) = stream.set_keepalive(keep_alive) {
+                    eprintln!("Core: cannot set keepalive for stream {}", address);
+                }
 
                 TcpSession::run(network, address, stream, initiator);
 
@@ -279,6 +292,11 @@ where
         let future = self.network.send(msg).map_err(|_| {});
 
         Arbiter::handle().spawn(future);
+    }
+
+    fn error(&mut self, err: CodecError, _ctx: &mut Self::Context) -> Running {
+        eprintln!("TCP message stream error: {}", err);
+        Running::Continue
     }
 }
 
