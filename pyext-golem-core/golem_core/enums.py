@@ -7,27 +7,6 @@ __all__ = (
 )
 
 
-class _IntConversionMixin:
-
-    @classmethod
-    def convert_from(cls, value: int):
-        return cls(value)
-
-    def convert_to(self) -> int:
-        return int(self.value)
-
-
-class LogLevel(_IntConversionMixin, Enum):
-
-    Debug = 0
-    Info = 1
-    Warning = 2
-    Error = 3
-
-    def __str__(self):
-        return self.name.lower()
-
-
 class ErrorKind(Enum):
 
     Io = 'Io'
@@ -37,7 +16,7 @@ class ErrorKind(Enum):
     Other = 'Other'
 
     @staticmethod
-    def from_core_error(error):
+    def convert_from(error) -> 'ErrorKind':
         error_str = str(error)
         for kind in ErrorKind:
             if error_str.startswith(kind.value):
@@ -45,8 +24,29 @@ class ErrorKind(Enum):
         return ErrorKind.Python
 
 
-class TransportProtocol(_IntConversionMixin, Enum):
+class _IntConvertMixin:
+
+    @classmethod
+    def convert_from(cls, value: int):
+        return cls(value)
+
+    def convert_to(self) -> int:
+        return int(self.value)
+
+
+class TransportProtocol(_IntConvertMixin, Enum):
 
     Tcp = 6
     Udp = 17
     Unsupported = 0
+
+
+class LogLevel(_IntConvertMixin, Enum):
+
+    Debug = 0
+    Info = 1
+    Warning = 2
+    Error = 3
+
+    def __str__(self):
+        return self.name.lower()

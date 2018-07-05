@@ -2,15 +2,14 @@ import inspect
 import sys
 
 from abc import ABCMeta
-from typing import Tuple
+from typing import Dict, List, Tuple, Type, Union
 
 from .enums import TransportProtocol, LogLevel
 from .structs import Encapsulated
 
 
 __all__ = (
-    'CoreEvent',
-    'BaseEvent',
+    'Event',
     'Exiting',
     'Started',
     'Stopped',
@@ -21,11 +20,23 @@ __all__ = (
 )
 
 
-class BaseEvent(metaclass=ABCMeta):
-    ID = None
+class Event(metaclass=ABCMeta):
+
+    __events = None
+
+    @classmethod
+    def convert_from(cls, payload: Union[List, Tuple]) -> 'Event':
+        if len(payload) < 1:
+            raise ValueError("Event ID is missing")
+
+        if not cls.__events:
+            cls.__events = _subclasses(cls)
+
+        event = cls.__events.get(payload[0])
+        return event(*payload[1:])
 
 
-class TransportAndAddressEvent(BaseEvent, metaclass=ABCMeta):
+class TransportAndAddressEvent(Event, metaclass=ABCMeta):
 
     def __init__(self,
                  transport_id: int,
@@ -35,7 +46,7 @@ class TransportAndAddressEvent(BaseEvent, metaclass=ABCMeta):
         self.address = address
 
 
-class Exiting(BaseEvent):
+class Exiting(Event):
     ID = 0
 
 
@@ -75,40 +86,25 @@ class Message(TransportAndAddressEvent):
         self.encapsulated = Encapsulated(*encapsulated)
 
 
-class Log(BaseEvent):
+class Log(Event):
     ID = 200
 
-    def __init__(
-        self,
-        log_level: LogLevel,
-        message: str,
-    ) -> None:
+    def __init__(self,
+                 log_level: LogLevel,
+                 message: str) -> None:
 
         self.log_level = log_level
         self.message = message
 
 
-def _collect_events():
+def _subclasses(cls) -> Dict[str, Type]:
     module = sys.modules[__name__]
-    es = inspect.getmembers(
+    events = inspect.getmembers(
         module,
         lambda c: bool(
             inspect.isclass(c) and
-            c is not BaseEvent and
-            issubclass(c, BaseEvent)
+            c is not cls and
+            issubclass(c, cls)
         )
     )
-    return {e.ID: e for _, e in es}
-
-
-class CoreEvent:
-
-    core_events = _collect_events()
-
-    @classmethod
-    def convert_from(cls, payload) -> BaseEvent:
-        if len(payload) < 1:
-            raise ValueError("Event ID is missing")
-
-        event = cls.core_events.get(payload[0])
-        return event(*payload[1:])
+    return {e.ID: e for _, e in events}

@@ -43,7 +43,7 @@ class Network:
             return
 
         try:
-            event = CoreEvent.convert_from(args)
+            event = Event.convert_from(args)
         except Exception as exc:
             print(f'Invalid args: args: {exc}')
         else:
@@ -84,10 +84,6 @@ class Network:
         time.sleep(delay)
         self.network.send(*msg)
 
-def usage(name: str) -> None:
-    print('Usage:', name)
-    print('\t', name, 'listen_ip:listen_port [connect_ip:connect_port]')
-
 
 def address(as_str: str) -> Optional[Tuple[str, int]]:
     split = as_str.split(':')
@@ -106,23 +102,26 @@ def address(as_str: str) -> Optional[Tuple[str, int]]:
 def main(args) -> None:
 
     if len(args) < 2:
-        return usage(args[0])
+        print('Usage:', args[0])
+        print('\t', args[0], 'listen_ip:listen_port [connect_ip:connect_port]')
+        sys.exit(1)
 
     listen_address = address(args[1])
     connect_address = None
 
     if not listen_address:
         print(f'Invalid address: {args[1]}')
-        return
+        sys.exit(1)
 
     if len(args) > 2:
         connect_address = address(args[2])
         if not connect_address:
             print(f'Invalid address: {args[2]}')
-            return
+            sys.exit(1)
 
     network = Network(listen_address, connect_address)
     network.run()
+
 
 if __name__ == '__main__':
     main(sys.argv)
