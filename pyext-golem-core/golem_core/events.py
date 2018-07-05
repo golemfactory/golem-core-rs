@@ -21,7 +21,7 @@ __all__ = (
 
 
 class Event(metaclass=ABCMeta):
-
+    ID = None
     __events = None
 
     @classmethod
