@@ -18,20 +18,38 @@ pub enum CoreEvent {
     Log(LogLevel, String),
 }
 
-impl CoreEvent {
-    pub fn make_py_tuple(self, py: Python) -> PyTuple {
+impl ToPyObject for CoreEvent {
+    type ObjectType = PyTuple;
+
+    fn to_py_object(&self, py: Python) -> Self::ObjectType {
+        unimplemented!()
+    }
+
+    fn into_py_object(self, py: Python) -> Self::ObjectType {
         match self {
-            CoreEvent::Exiting              => py_wrap!(py, (0,)),
-            CoreEvent::Started(t, a)        => py_wrap!(py, (1, t as u16, host_port(&a))),
-            CoreEvent::Stopped(t, a)        => py_wrap!(py, (2, t as u16, host_port(&a))),
-            CoreEvent::Connected(t, a, i)   => py_wrap!(py, (100, t as u16, host_port(&a), i)),
-            CoreEvent::Disconnected(t, a)   => py_wrap!(py, (101, t as u16, host_port(&a))),
-            CoreEvent::Message(t, a, e)     => {
-                let bytes = PyBytes::new(py, &e.message[..]);
-                let message = py_wrap!(py, (e.protocol_id, bytes));
-                                               py_wrap!(py, (102, t as u16, host_port(&a), message))
+            CoreEvent::Exiting => {
+                py_wrap!(py, (0,))
             },
-            CoreEvent::Log(l, m)            => py_wrap!(py, (200, l, m)),
+            CoreEvent::Started(transport, address) => {
+                py_wrap!(py, (1, transport as u16, host_port(&address)))
+            }
+            CoreEvent::Stopped(transport, address) => {
+                py_wrap!(py, (2, transport as u16, host_port(&address)))
+            }
+            CoreEvent::Connected(transport, address, initiator) => {
+                py_wrap!(py, (100, transport as u16, host_port(&address), initiator))
+            }
+            CoreEvent::Disconnected(transport, address) => {
+                py_wrap!(py, (101, transport as u16, host_port(&address)))
+            }
+            CoreEvent::Message(transport, address, encapsulated) => {
+                let bytes: PyBytes = PyBytes::new(py, &encapsulated.message[..]);
+                let message = py_wrap!(py, (encapsulated.protocol_id, bytes));
+                py_wrap!(py, (102, transport as u16, host_port(&address), message))
+            }
+            CoreEvent::Log(level, message) => {
+                py_wrap!(py, (200, level, message))
+            },
         }
     }
 }

@@ -7,6 +7,7 @@ extern crate futures;
 extern crate cpython;
 extern crate net;
 extern crate pyo3;
+extern crate spin;
 
 #[macro_use]
 pub mod python;
@@ -16,21 +17,23 @@ pub mod event;
 pub mod logging;
 pub mod network;
 
+use std::time::Duration;
 use cpython::*;
-use std::sync::{Arc, Mutex};
 
 use core::*;
-use python::*;
+use error::ModuleError;
 
-static mut CORE: Core = Core { network: None };
+static mut CORE: Core = Core{
+    network: None,
+    rx: None,
+};
+
 
 py_exception!(libgolem_core, CoreError);
 py_class!(class CoreNetwork |py| {
-    data queue: PyShared;
 
-    def __new__(_cls, queue: PyObject) -> PyResult<CoreNetwork> {
-        let queue = Arc::new(Mutex::new(Some(queue)));
-        CoreNetwork::create_instance(py, queue)
+    def __new__(_cls) -> PyResult<CoreNetwork> {
+        CoreNetwork::create_instance(py)
     }
 
     def running(&self) -> PyResult<bool> {
@@ -46,11 +49,10 @@ py_class!(class CoreNetwork |py| {
     ) -> PyResult<bool> {
         unsafe {
             if CORE.running() {
-                return Ok(false);
+                return Err(ModuleError::not_running().into());
             }
 
-            let queue = self.queue(py).clone();
-            match CORE.run(queue, host, port) {
+            match CORE.run(py, host, port) {
                 Ok(_) => Ok(true),
                 Err(e) => Err(e.into())
             }
@@ -60,7 +62,7 @@ py_class!(class CoreNetwork |py| {
     def stop(&self) -> PyResult<bool> {
         unsafe {
             if !CORE.running() {
-                return Ok(false);
+                return Err(ModuleError::not_running().into());
             }
 
             match CORE.stop() {
@@ -78,10 +80,10 @@ py_class!(class CoreNetwork |py| {
     ) -> PyResult<bool> {
         unsafe {
             if !CORE.running() {
-                return Ok(false);
+                return Err(ModuleError::not_running().into());
             }
 
-            match CORE.connect(protocol, host, port) {
+            match CORE.connect(py, protocol, host, port) {
                 Ok(_) => Ok(true),
                 Err(e) => Err(e.into()),
             }
@@ -96,10 +98,10 @@ py_class!(class CoreNetwork |py| {
     ) -> PyResult<bool> {
         unsafe {
             if !CORE.running() {
-                return Ok(false);
+                return Err(ModuleError::not_running().into());
             }
 
-            match CORE.disconnect(protocol, host, port) {
+            match CORE.disconnect(py, protocol, host, port) {
                 Ok(_) => Ok(true),
                 Err(e) => Err(e.into()),
             }
@@ -119,9 +121,39 @@ py_class!(class CoreNetwork |py| {
                 return Ok(false);
             }
 
-            match CORE.send(protocol, host, port, protocol_id, message) {
+            match CORE.send(py, protocol, host, port, protocol_id, message) {
                 Ok(_) => Ok(true),
                 Err(e) => Err(e.into()),
+            }
+        }
+    }
+
+    def poll(&self, timeout: PyLong) -> PyResult<Option<PyTuple>> {
+        unsafe {
+            if !CORE.running() {
+                return Ok(None);
+            }
+
+            match CORE.rx {
+                None => Ok(None),
+                Some(ref rx) => {
+                    let timeout: i64 = timeout.into_object().extract(py)?;
+                    if timeout > 0 {
+                        // convert from s to ms
+                        let duration = Duration::from_millis((timeout * 1000) as u64);
+                        // give control back to Python's VM for the time
+                        match py.allow_threads(|| rx.lock().recv_timeout(duration)) {
+                            Ok(ev) => Ok(Some(ev.into_py_object(py))),
+                            Err(e) => Ok(None),
+                        }
+                    } else {
+                        // in-place poll
+                        match rx.lock().recv() {
+                            Ok(ev) => Ok(Some(ev.into_py_object(py))),
+                            Err(e) => Ok(None),
+                        }
+                    }
+                }
             }
         }
     }

@@ -1,5 +1,5 @@
 use std::net::AddrParseError;
-use std::sync::mpsc::RecvError;
+use std::sync::mpsc::{RecvError, RecvTimeoutError};
 use std::{convert, error, fmt, io};
 
 use actix::MailboxError;
@@ -30,6 +30,10 @@ impl ModuleError {
             message: String::from(message),
             py_err,
         }
+    }
+
+    pub fn not_running() -> Self {
+        ModuleError::new(ErrorKind::Other, &format!("not running"), None)
     }
 }
 
@@ -72,6 +76,12 @@ impl convert::From<AddrParseError> for ModuleError {
 impl convert::From<RecvError> for ModuleError {
     fn from(e: RecvError) -> Self {
         ModuleError::new(ErrorKind::Network, &format!("rx error: {}", e), None)
+    }
+}
+
+impl convert::From<RecvTimeoutError> for ModuleError {
+    fn from(e: RecvTimeoutError) -> Self {
+        ModuleError::new(ErrorKind::Network, &format!("rx timeout: {}", e), None)
     }
 }
 

@@ -48,28 +48,6 @@ macro_rules! py_wrap {
     }};
 }
 
-/// Calls a method of a PyShared object
-macro_rules! py_call_method {
-    ($py:expr, $py_obj:expr, $method:expr) => {{
-        py_call_method!($py, $py_obj, $method, (), None)
-    }};
-    ($py:expr, $py_obj:expr, $method:expr, $args:expr) => {{
-        py_call_method!($py, $py_obj, $method, $args, None)
-    }};
-    ($py:expr, $py_obj:expr, $method:expr, $args:expr, $kwargs:expr) => {{
-        if let Some(ref obj) = *$py_obj.lock().unwrap() {
-            match obj.getattr($py, $method) {
-                Ok(method) => {
-                    if let Err(_) = method.call($py, $args, $kwargs) {
-                        eprintln!("Core: cannot call a Python method");
-                    }
-                }
-                Err(_) => {}
-            };
-        }
-    }};
-}
-
 //
 // Helper functions
 //
@@ -87,13 +65,14 @@ impl<'a> Into<(String, u16)> for SocketAddrWrapper<'a> {
 }
 
 pub fn host_port(address: &SocketAddr) -> (String, u16) {
-    SocketAddrWrapper{ address: &address }.into()
+    SocketAddrWrapper { address: &address }.into()
 }
 
-pub fn to_socket_address(py_host: PyString, py_port: PyLong) -> Result<SocketAddr, ModuleError> {
-    let gil = Python::acquire_gil();
-    let py = gil.python();
-
+pub fn to_socket_address(
+    py: Python,
+    py_host: PyString,
+    py_port: PyLong,
+) -> Result<SocketAddr, ModuleError> {
     let host: String = py_extract!(py, py_host)?;
     let port: u16 = py_extract!(py, py_port)?;
     let address: SocketAddr = socket_address(&host, port)?;
@@ -101,10 +80,7 @@ pub fn to_socket_address(py_host: PyString, py_port: PyLong) -> Result<SocketAdd
     Ok(address)
 }
 
-pub fn from_socket_address(address: SocketAddr) -> (PyString, PyInt) {
-    let gil = Python::acquire_gil();
-    let py = gil.python();
-
+pub fn from_socket_address(py: Python, address: SocketAddr) -> (PyString, PyInt) {
     let (host, port) = host_port(&address);
     let py_host: PyString = py_wrap!(py, host);
     let py_port: PyInt = py_wrap!(py, port);
