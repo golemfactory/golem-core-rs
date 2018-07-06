@@ -67,7 +67,7 @@ where
                 .map(move |stream| {
                     let keep_alive = Some(Duration::new(3, 0));
                     if let Err(_) = stream.set_keepalive(keep_alive) {
-                        eprintln!("Core: cannot set keepalive for stream {}", address);
+                        eprintln!("TCP: cannot set keep-alive for stream ({})", address);
                     }
 
                     CreateSession {
@@ -103,7 +103,7 @@ where
         let future = self
             .network
             .send(msg)
-            .map_err(|_| eprintln!("TCP -> network error (started)"));
+            .map_err(|e| eprintln!("TCP: failed to send 'Listening' event: {}", e));
 
         Arbiter::handle().spawn(future);
     }
@@ -116,7 +116,7 @@ where
         let future = self
             .network
             .send(msg)
-            .map_err(|_| eprintln!("TCP -> network error (stopping)"));
+            .map_err(|e| eprintln!("TCP: failed to send 'Stopped' event: {}", e));
 
         Arbiter::handle().spawn(future);
         Running::Stop
@@ -153,7 +153,7 @@ where
         let network = self.network.clone();
         let future = TcpStream::connect(&msg.address)
             .map_err(move |e| {
-                eprintln!("Connect error {}", e);
+                eprintln!("TCP: error while connecting to {}: {}", msg.address, e);
             })
             .and_then(move |stream| {
                 let address = stream.peer_addr().unwrap();
@@ -161,7 +161,7 @@ where
 
                 let keep_alive = Some(Duration::new(3, 0));
                 if let Err(_) = stream.set_keepalive(keep_alive) {
-                    eprintln!("Core: cannot set keepalive for stream {}", address);
+                    eprintln!("TCP: cannot set keep-alive for stream ({})", address);
                 }
 
                 TcpSession::run(network, address, stream, initiator);
@@ -255,7 +255,8 @@ where
             initiator: self.initiator,
         };
 
-        let future = self.network.send(msg).map_err(|_| {});
+        let future = self.network.send(msg)
+            .map_err(|_| eprintln!("TCP: failed to send 'Connected' event"));
 
         Arbiter::handle().spawn(future);
     }
@@ -266,7 +267,8 @@ where
             address: self.address.clone(),
         };
 
-        let future = self.network.send(msg).map_err(|_| {});
+        let future = self.network.send(msg)
+            .map_err(|_| eprintln!("TCP: failed to send 'Disconnected' event"));
 
         Arbiter::handle().spawn(future);
         Running::Stop
@@ -289,13 +291,14 @@ where
             message: msg,
         };
 
-        let future = self.network.send(msg).map_err(|_| {});
+        let future = self.network.send(msg)
+            .map_err(|_| eprintln!("TCP: failed to send 'Message' event"));
 
         Arbiter::handle().spawn(future);
     }
 
     fn error(&mut self, err: CodecError, _ctx: &mut Self::Context) -> Running {
-        eprintln!("TCP message stream error: {}", err);
+        eprintln!("TCP: message stream error: {}", err);
         Running::Continue
     }
 }
@@ -309,7 +312,7 @@ where
 
     fn handle(&mut self, msg: SessionSendMessage, _ctx: &mut Self::Context) {
         if self.writer.closed() {
-            eprintln!("Trying to write to a closed TCP stream ({})", self.address);
+            eprintln!("TCP: trying to write to a closed stream ({})", self.address);
             return;
         }
 
