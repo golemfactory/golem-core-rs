@@ -1,8 +1,9 @@
+use std::sync::mpsc;
+
 use actix;
 use actix::msgs;
 use actix::prelude::*;
 use actix::{Addr, Unsync};
-use futures::sync::mpsc::UnboundedSender;
 use futures::Future;
 
 use net::codec::message::Message;
@@ -19,11 +20,11 @@ pub struct NetworkCore {
     sessions: Sessions<NetworkCore>,
     tcp: Option<TcpActorAddr<NetworkCore>>,
     udp: Option<UdpActorAddr<NetworkCore>>,
-    tx: UnboundedSender<CoreEvent>,
+    tx: mpsc::SyncSender<CoreEvent>,
 }
 
 impl NetworkCore {
-    pub fn run(tx: UnboundedSender<CoreEvent>) -> (Addr<Unsync, Self>, Addr<Syn, Self>) {
+    pub fn run(tx: mpsc::SyncSender<CoreEvent>) -> (Addr<Unsync, Self>, Addr<Syn, Self>) {
         NetworkCore::create(|_| NetworkCore {
             sessions: Sessions::new(),
             tcp: None,
@@ -33,7 +34,7 @@ impl NetworkCore {
     }
 
     fn tx_send(&self, event: CoreEvent) {
-        if let Err(e) = self.tx.unbounded_send(event) {
+        if let Err(e) = self.tx.send(event) {
             eprintln!("Core: error sending event: {}", e);
         }
     }
@@ -46,7 +47,8 @@ impl NetworkCore {
     {
         match transport {
             Some(ref t) => {
-                let future = t.send(message).map(|_| ()).map_err(move |_| {});
+                let future = t.send(message).map(|_| ())
+                    .map_err(move |_| eprintln!("Core: error sending message to transport"));
 
                 Arbiter::handle().spawn(future);
                 Ok(())

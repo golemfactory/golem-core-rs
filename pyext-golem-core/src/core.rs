@@ -1,11 +1,11 @@
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc};
 use std::thread;
 
 use actix::prelude::*;
 use actix::Syn;
 use cpython::*;
-use futures::sync::mpsc::{unbounded, UnboundedReceiver};
-use futures::{Future, Stream};
+use futures::Future;
+use spin;
 
 use net::codec::message::{Encapsulated, Message};
 use net::transport::message::*;
@@ -18,80 +18,47 @@ use event::CoreEvent;
 use network::*;
 use python::*;
 
-struct Bridge {
-    queue: Option<PyShared>,
-    rx: Option<UnboundedReceiver<CoreEvent>>,
-}
-
-impl Bridge {
-    pub fn run(queue: PyShared, rx: UnboundedReceiver<CoreEvent>) -> Addr<Unsync, Self> {
-        Bridge::create(move |_ctx| Bridge {
-            queue: Some(queue),
-            rx: Some(rx),
-        })
-    }
-}
-
-impl Actor for Bridge {
-    type Context = Context<Self>;
-
-    fn started(&mut self, ctx: &mut <Self as Actor>::Context) {
-        let queue = self.queue.take().unwrap();
-        let rx = self.rx.take().unwrap();
-
-        let reader =
-            rx.for_each(move |event| {
-                let gil = Python::acquire_gil();
-                let py = gil.python();
-
-                let event: PyTuple = event.make_py_tuple(py);
-                let args: PyTuple = py_wrap!(py, (event,));
-                py_call_method!(py, queue, "put", args, None);
-
-                Ok(())
-            }).map_err(|_| eprintln!("Core event receiver error"));
-
-        Arbiter::handle().spawn(reader);
-    }
-}
+const CHANNEL_SIZE: usize = 2048;
 
 pub struct Core {
     pub network: Option<Addr<Syn, NetworkCore>>,
+    // Makes the Receiver Sync; required to hand off execution to Python's VM
+    pub rx: Option<Arc<spin::Mutex<mpsc::Receiver<CoreEvent>>>>,
 }
 
 impl Core {
     pub fn run(
         &mut self,
-        queue: PyShared,
+        py: Python,
         py_host: PyString,
         py_port: PyLong,
     ) -> Result<(), ModuleError> {
-        let address = to_socket_address(py_host, py_port)?;
+        // initialize and assign Python context
+        let address = to_socket_address(py, py_host, py_port)?;
+
         // start callback channel
-        let (tx, rx) = unbounded();
+        let (tx_queue, rx_queue) = mpsc::sync_channel(CHANNEL_SIZE);
         // start initialization channel
-        let (tx_init, rx_init) = mpsc::channel();
+        let (tx, rx) = mpsc::channel();
 
         // spawn the network thread
         thread::spawn(move || {
             let sys = System::new("net");
-            let (unsync, syn) = NetworkCore::run(tx);
+            let (unsync, syn) = NetworkCore::run(tx_queue);
 
             if let Err(e) = TcpTransport::run(unsync.clone(), address.clone()) {
                 let e = ModuleError::from(e);
-                tx_init.send(Err(e)).ok();
+                tx.send(Err(e)).ok();
                 return;
             }
 
             if let Err(e) = UdpTransport::run(unsync.clone(), address.clone()) {
                 let e = ModuleError::from(e);
-                tx_init.send(Err(e)).ok();
+                tx.send(Err(e)).ok();
                 return;
             }
 
-            Bridge::run(queue, rx);
-
-            if let Err(_) = tx_init.send(Ok(syn)) {
+            if let Err(_) = tx.send(Ok(syn)) {
                 return;
             }
 
@@ -99,10 +66,11 @@ impl Core {
         });
 
         // retrieve the (syn) network actor address
-        let result = rx_init.recv()?;
+        let result = rx.recv()?;
         match result {
             Ok(a) => {
                 self.network = Some(a);
+                self.rx = Some(Arc::new(spin::Mutex::new(rx_queue)));
                 Ok(())
             }
             Err(e) => Err(e),
@@ -117,8 +85,8 @@ impl Core {
     }
 
     pub fn stop(&self) -> Result<(), ModuleError> {
-        self.network_send(Stop(TransportProtocol::Tcp))?;
-        self.network_send(Stop(TransportProtocol::Udp))?;
+        self.forward(Stop(TransportProtocol::Tcp))?;
+        self.forward(Stop(TransportProtocol::Udp))?;
         Ok(())
     }
 }
@@ -126,65 +94,59 @@ impl Core {
 impl Core {
     pub fn connect(
         &self,
+        py: Python,
         py_protocol: PyLong,
         py_host: PyString,
         py_port: PyLong,
     ) -> Result<(), ModuleError> {
-        let address = to_socket_address(py_host, py_port)?;
-        let protocol: u16 = py_extract!(py_protocol)?;
+        let address = to_socket_address(py, py_host, py_port)?;
+        let protocol: u16 = py_extract!(py, py_protocol)?;
         let transport = TransportProtocol::from(protocol);
 
-        self.network_send(Connect { transport, address })
-            .or_else(|e| Err(ModuleError::from(e)))
+        self.forward(Connect { transport, address })
     }
 
     pub fn disconnect(
         &self,
+        py: Python,
         py_protocol: PyLong,
         py_host: PyString,
         py_port: PyLong,
     ) -> Result<(), ModuleError> {
-        let address = to_socket_address(py_host, py_port)?;
-        let protocol: u16 = py_extract!(py_protocol)?;
+        let address = to_socket_address(py, py_host, py_port)?;
+        let protocol: u16 = py_extract!(py, py_protocol)?;
         let transport = TransportProtocol::from(protocol);
 
-        self.network_send(Disconnect { transport, address })
-            .or_else(|e| Err(ModuleError::from(e)))
+        self.forward(Disconnect { transport, address })
     }
 
     pub fn send(
         &self,
+        py: Python,
         py_protocol: PyLong,
         py_host: PyString,
         py_port: PyLong,
         py_protocol_id: PyLong,
         py_message: PyBytes,
     ) -> Result<(), ModuleError> {
-        let gil = Python::acquire_gil();
-        let py = gil.python();
-
-        let address = to_socket_address(py_host, py_port)?;
         let protocol: u16 = py_extract!(py, py_protocol)?;
         let protocol_id: u16 = py_extract!(py, py_protocol_id)?;
+        let address = to_socket_address(py, py_host, py_port)?;
         let message = py_message.data(py);
-        let message = message.to_vec();
 
-        let msg = SendMessage {
+        self.forward(SendMessage {
             transport: TransportProtocol::from(protocol),
             address,
             message: Message::Encapsulated(Encapsulated {
                 protocol_id,
-                message,
+                message: message.to_vec(),
             }),
-        };
-
-        self.network_send(msg)
-            .or_else(|e| Err(ModuleError::from(e)))
+        })
     }
 }
 
 impl Core {
-    fn network_send<M>(&self, msg: M) -> Result<(), MailboxError>
+    fn forward<M>(&self, msg: M) -> Result<(), ModuleError>
     where
         M: actix::Message + Send + 'static,
         M::Result: Send,
@@ -195,7 +157,7 @@ impl Core {
                 n.send(msg).wait()?;
                 Ok(())
             }
-            None => Err(MailboxError::Closed),
+            None => Err(ModuleError::from(MailboxError::Closed)),
         }
     }
 }
