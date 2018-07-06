@@ -6,7 +6,7 @@ from queue import Queue, Empty
 from typing import Tuple, Optional
 from threading import Thread
 
-from golem_core import CoreNetwork
+from golem_core import CoreNetwork, CoreError
 from golem_core.enums import *
 from golem_core.events import *
 
@@ -38,8 +38,11 @@ class Network:
 
     def _loop(self):
         try:
-            args = self.queue.get(block=True, timeout=3)
-        except Empty:
+            args = self.network.poll(3)
+        except CoreError:
+            return
+
+        if not args:
             return
 
         try:
