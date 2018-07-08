@@ -2,7 +2,6 @@ import os
 import sys
 import time
 
-from queue import Queue, Empty
 from typing import Tuple, Optional
 from threading import Thread
 
@@ -17,8 +16,7 @@ class Network:
         if not connect_address:
             connect_address = None, None
 
-        self.queue = Queue()
-        self.network = CoreNetwork(self.queue)
+        self.network = CoreNetwork()
         self.listen_host, self.listen_port = listen_address
         self.connect_host, self.connect_port = connect_address
         self.running = False
