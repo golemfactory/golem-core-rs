@@ -6,6 +6,7 @@ use actix::prelude::*;
 use actix::{Addr, Unsync};
 use futures::Future;
 
+use net::event::Event;
 use net::codec::message::Message;
 use net::network::session::*;
 use net::network::*;
@@ -14,17 +15,15 @@ use net::transport::tcp::TcpActorAddr;
 use net::transport::udp::UdpActorAddr;
 use net::transport::*;
 
-use event::CoreEvent;
-
 pub struct NetworkCore {
     sessions: Sessions<NetworkCore>,
     tcp: Option<TcpActorAddr<NetworkCore>>,
     udp: Option<UdpActorAddr<NetworkCore>>,
-    tx: mpsc::SyncSender<CoreEvent>,
+    tx: mpsc::SyncSender<Event>,
 }
 
 impl NetworkCore {
-    pub fn run(tx: mpsc::SyncSender<CoreEvent>) -> (Addr<Unsync, Self>, Addr<Syn, Self>) {
+    pub fn run(tx: mpsc::SyncSender<Event>) -> (Addr<Unsync, Self>, Addr<Syn, Self>) {
         NetworkCore::create(|_| NetworkCore {
             sessions: Sessions::new(),
             tcp: None,
@@ -33,7 +32,7 @@ impl NetworkCore {
         })
     }
 
-    fn tx_send(&self, event: CoreEvent) {
+    fn emit(&self, event: Event) {
         if let Err(e) = self.tx.send(event) {
             eprintln!("Core: error sending event: {}", e);
         }
@@ -100,18 +99,18 @@ impl Handler<Stopped<NetworkCore>> for NetworkCore {
     fn handle(&mut self, m: Stopped<NetworkCore>, ctx: &mut Self::Context) {
         match m.actor {
             Transport::Tcp(_) => {
-                self.tx_send(CoreEvent::Stopped(TransportProtocol::Tcp, m.address));
+                self.emit(Event::Stopped(TransportProtocol::Tcp, m.address));
                 self.tcp = None;
             }
             Transport::Udp(_) => {
-                self.tx_send(CoreEvent::Stopped(TransportProtocol::Udp, m.address));
+                self.emit(Event::Stopped(TransportProtocol::Udp, m.address));
                 self.udp = None;
             }
         };
 
         if let None = self.tcp {
             if let None = self.udp {
-                self.tx_send(CoreEvent::Exiting);
+                self.emit(Event::Exiting);
                 ctx.stop();
             }
         }
@@ -125,8 +124,8 @@ impl Handler<ReceivedMessage> for NetworkCore {
     fn handle(&mut self, m: ReceivedMessage, _ctx: &mut Self::Context) {
         match m.message {
             Message::Encapsulated(e) => {
-                let event = CoreEvent::Message(m.transport, m.address, e);
-                self.tx_send(event);
+                let event = Event::Message(m.transport, m.address, e);
+                self.emit(event);
             }
             _ => {}
         };
@@ -153,9 +152,9 @@ impl Handler<Connected<NetworkCore>> for NetworkCore {
     type Result = NoResult;
 
     fn handle(&mut self, m: Connected<NetworkCore>, _ctx: &mut Self::Context) {
-        let event = CoreEvent::Connected(m.transport.clone(), m.address.clone(), m.initiator);
+        let event = Event::Connected(m.transport.clone(), m.address.clone(), m.initiator);
         self.sessions.add(m.transport, m.address, m.session);
-        self.tx_send(event);
+        self.emit(event);
     }
 }
 
@@ -183,9 +182,9 @@ impl Handler<Disconnected> for NetworkCore {
     type Result = NoResult;
 
     fn handle(&mut self, m: Disconnected, _ctx: &mut Self::Context) {
-        let event = CoreEvent::Disconnected(m.transport.clone(), m.address.clone());
+        let event = Event::Disconnected(m.transport.clone(), m.address.clone());
         self.sessions.remove(&m.transport, &m.address);
-        self.tx_send(event);
+        self.emit(event);
     }
 }
 
@@ -205,8 +204,8 @@ impl Handler<Listening<NetworkCore>> for NetworkCore {
             }
         };
 
-        let event = CoreEvent::Started(transport, m.address);
-        self.tx_send(event);
+        let event = Event::Started(transport, m.address);
+        self.emit(event);
     }
 }
 

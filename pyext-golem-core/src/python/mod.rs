@@ -1,10 +1,13 @@
+use std::error::Error;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
-use cpython::{PyInt, PyLong, PyObject, PyString, Python, ToPyObject};
+use cpython::*;
+use net::socket_address;
+use net::event::Event;
 
 use error::*;
-use net::socket_address;
+use logging::*;
 
 pub type PyShared = Arc<Mutex<Option<PyObject>>>;
 
@@ -52,6 +55,9 @@ macro_rules! py_wrap {
 // Helper functions
 //
 
+
+// SocketAddr
+
 struct SocketAddrWrapper<'a> {
     address: &'a SocketAddr,
 }
@@ -86,6 +92,54 @@ pub fn from_socket_address(py: Python, address: SocketAddr) -> (PyString, PyInt)
     let py_port: PyInt = py_wrap!(py, port);
 
     (py_host, py_port)
+}
+
+// Event
+
+struct EventWrapper {
+    event: Event,
+}
+
+impl ToPyObject for EventWrapper {
+    type ObjectType = PyTuple;
+
+    fn to_py_object(&self, py: Python) -> Self::ObjectType {
+        unimplemented!()
+    }
+
+    fn into_py_object(self, py: Python) -> Self::ObjectType {
+        match self.event {
+            Event::Exiting => {
+                py_wrap!(py, (0,))
+            },
+            Event::Started(transport, address) => {
+                py_wrap!(py, (1, transport as u16, host_port(&address)))
+            }
+            Event::Stopped(transport, address) => {
+                py_wrap!(py, (2, transport as u16, host_port(&address)))
+            }
+            Event::Connected(transport, address, initiator) => {
+                py_wrap!(py, (100, transport as u16, host_port(&address), initiator))
+            }
+            Event::Disconnected(transport, address) => {
+                py_wrap!(py, (101, transport as u16, host_port(&address)))
+            }
+            Event::Message(transport, address, encapsulated) => {
+                let bytes: PyBytes = PyBytes::new(py, &encapsulated.message[..]);
+                let message = py_wrap!(py, (encapsulated.protocol_id, bytes));
+                py_wrap!(py, (102, transport as u16, host_port(&address), message))
+            }
+            Event::Error(e) => {
+                let level = LogLevel::from(e.severity);
+                let message = e.description();
+                py_wrap!(py, (200, level, message))
+            },
+        }
+    }
+}
+
+pub fn event_into(py: Python, event: Event) -> PyTuple {
+    EventWrapper{ event }.into_py_object(py)
 }
 
 //

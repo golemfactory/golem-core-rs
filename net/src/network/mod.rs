@@ -3,7 +3,6 @@ pub mod session;
 use actix::{Actor, Addr, AsyncContext, Handler, Unsync};
 use transport::message::*;
 
-
 pub type NetAddr<N> = Addr<Unsync, N>;
 
 pub trait Network:
@@ -21,3 +20,7 @@ where
     Self::Context: AsyncContext<Self>,
 {
 }
+
+
+
+

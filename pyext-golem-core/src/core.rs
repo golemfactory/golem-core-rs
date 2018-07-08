@@ -7,6 +7,7 @@ use cpython::*;
 use futures::Future;
 use spin;
 
+use net::event::Event;
 use net::codec::message::{Encapsulated, Message};
 use net::transport::message::*;
 use net::transport::tcp::TcpTransport;
@@ -14,7 +15,6 @@ use net::transport::udp::UdpTransport;
 use net::transport::*;
 
 use error::ModuleError;
-use event::CoreEvent;
 use network::*;
 use python::*;
 
@@ -23,7 +23,7 @@ const CHANNEL_SIZE: usize = 2048;
 pub struct Core {
     pub network: Option<Addr<Syn, NetworkCore>>,
     // Makes the Receiver Sync; required to hand off execution to Python's VM
-    pub rx: Option<Arc<spin::Mutex<mpsc::Receiver<CoreEvent>>>>,
+    pub rx: Option<Arc<spin::Mutex<mpsc::Receiver<Event>>>>,
 }
 
 impl Core {

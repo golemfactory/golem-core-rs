@@ -11,11 +11,11 @@ use tokio_io::io::WriteHalf;
 use tokio_io::AsyncRead;
 use tokio_tcp::{TcpListener, TcpStream};
 
+use error::Error;
 use codec::error::CodecError;
 use codec::message::Message;
 use codec::MessageCodec;
 use network::*;
-use transport::error::*;
 use transport::message::*;
 use transport::*;
 
@@ -54,7 +54,7 @@ where
     ) -> Result<TcpActorAddr<N>, Box<error::Error>> {
         let listener = match TcpListener::bind(&address) {
             Ok(l) => l,
-            Err(_) => return Err(Box::new(cannot_listen_error("TCP", &address))),
+            Err(e) => return Err(Box::new(Error::from(e))),
         };
 
         // store the actual IP address and port

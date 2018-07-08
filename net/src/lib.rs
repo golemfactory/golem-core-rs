@@ -14,6 +14,8 @@ extern crate actix;
 #[macro_use]
 extern crate serde_derive;
 
+pub mod error;
+pub mod event;
 pub mod codec;
 pub mod network;
 pub mod transport;

@@ -13,7 +13,6 @@ extern crate spin;
 pub mod python;
 pub mod core;
 pub mod error;
-pub mod event;
 pub mod logging;
 pub mod network;
 
@@ -22,6 +21,7 @@ use cpython::*;
 
 use core::*;
 use error::ModuleError;
+use python::event_into;
 
 static mut CORE: Core = Core{
     network: None,
@@ -143,13 +143,13 @@ py_class!(class CoreNetwork |py| {
                         let duration = Duration::from_millis((timeout * 1000) as u64);
                         // give control back to Python's VM for the time
                         match py.allow_threads(|| rx.lock().recv_timeout(duration)) {
-                            Ok(ev) => Ok(Some(ev.into_py_object(py))),
+                            Ok(ev) => Ok(Some(event_into(py, ev))),
                             Err(e) => Ok(None),
                         }
                     } else {
                         // in-place poll
                         match rx.lock().recv() {
-                            Ok(ev) => Ok(Some(ev.into_py_object(py))),
+                            Ok(ev) => Ok(Some(event_into(py, ev))),
                             Err(e) => Ok(None),
                         }
                     }

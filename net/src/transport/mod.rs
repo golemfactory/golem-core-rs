@@ -1,4 +1,3 @@
-pub mod error;
 pub mod message;
 pub mod tcp;
 pub mod udp;
