@@ -7,10 +7,6 @@ authors = ["Marek Franciszkiewicz <marek@golem.network>"]
 name = "net"
 path = "src/lib.rs"
 
-[[bin]]
-name = "net"
-path = "src/bin.rs"
-
 [dependencies]
 actix = "0.5"
 bincode = "0.9"
