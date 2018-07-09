@@ -9,13 +9,13 @@ use spin;
 
 use net::event::Event;
 use net::codec::message::{Encapsulated, Message};
+use net::network::NetworkCore;
 use net::transport::message::*;
 use net::transport::tcp::TcpTransport;
 use net::transport::udp::UdpTransport;
 use net::transport::*;
 
 use error::ModuleError;
-use network::*;
 use python::*;
 
 const CHANNEL_SIZE: usize = 2048;

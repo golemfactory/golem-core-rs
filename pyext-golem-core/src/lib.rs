@@ -14,7 +14,6 @@ pub mod python;
 pub mod core;
 pub mod error;
 pub mod logging;
-pub mod network;
 
 use std::time::Duration;
 use cpython::*;
