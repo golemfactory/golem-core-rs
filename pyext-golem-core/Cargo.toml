@@ -19,5 +19,5 @@ version = "0.2"
 default-features = false
 
 [dependencies.spin]
-version = "0.4"
+version = "0.4.9"
 default-features = false
