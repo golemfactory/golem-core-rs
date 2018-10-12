@@ -28,8 +28,10 @@ class Network:
         self.running = True
 
         if self.connect_host and self.connect_port:
+            self.network.poll(3)
             address = (self.connect_host, self.connect_port)
-            self.network.connect(address)
+            res = self.network.connect(TransportProtocol.Tcp.value, self.connect_host, self.connect_port)
+            print('Connected? {}'.format(res))
 
         while self.running:
             self._loop()
@@ -37,6 +39,7 @@ class Network:
     def _loop(self):
         try:
             args = self.network.poll(3)
+            print('args? {}'.format(args))
         except CoreError:
             return
 
