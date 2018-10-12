@@ -28,8 +28,7 @@ class Network:
         self.running = True
 
         if self.connect_host and self.connect_port:
-            self.network.poll(3)
-            address = (self.connect_host, self.connect_port)
+            self.network.poll(0)
             res = self.network.connect(TransportProtocol.Tcp.value, self.connect_host, self.connect_port)
             print('Connected? {}'.format(res))
 
